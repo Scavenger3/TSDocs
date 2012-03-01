@@ -1,0 +1,5 @@
+%255,250,205%Guest: /register then /login
+%255,250,205%Member: /money, /warp
+%255,250,205%Donator 1: /myhome
+%255,250,205%Donator 2: /kit tools, /tp
+%255,250,205%Mod: /tphere, /kick
