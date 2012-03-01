@@ -1,0 +1,1 @@
+%173,255,047%Welcome to the server %name!%173,255,047%Current World: %world%173,255,047%Currently Online: %online
