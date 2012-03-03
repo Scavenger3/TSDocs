@@ -8,12 +8,14 @@ using TShockAPI;
 using System.ComponentModel;
 using System.IO;
 using System.Threading;
+using System.Net;
 
 namespace TSDocs
 {
     [APIVersion(1, 11)]
-    public class TSMain : TerrariaPlugin
+    public class TSDocs : TerrariaPlugin
     {
+        Dictionary<string, string[]> CachedFiles = new Dictionary<string, string[]>();
         public static TSConfig getConfig { get; set; }
         internal static string ConfigPath { get { return Path.Combine(TShockAPI.TShock.SavePath, "TSDocs/Config.json"); } }
         public static String savepath = "";
@@ -35,7 +37,7 @@ namespace TSDocs
 
         public override Version Version
         {
-            get { return new Version("1.0"); }
+            get { return new Version("1.0.1"); }
         }
 
         public override void Initialize()
@@ -56,7 +58,7 @@ namespace TSDocs
             base.Dispose(disposing);
         }
 
-        public TSMain(Main game)
+        public TSDocs(Main game)
             : base(game)
         {
             Order = -15;
@@ -88,10 +90,11 @@ namespace TSDocs
         {
             try
             {
-                if (File.Exists(ConfigPath))
+                if (!File.Exists(ConfigPath))
                 {
-                     getConfig = TSConfig.Read(ConfigPath);
+                    NewConfig();
                 }
+                getConfig = TSConfig.Read(ConfigPath);
                 getConfig.Write(ConfigPath);
 
                 if (!File.Exists(savepath + getConfig.motd.file))
@@ -142,10 +145,11 @@ namespace TSDocs
             getConfig = new TSConfig();
             try
             {
-                if (File.Exists(ConfigPath))
+                if (!File.Exists(ConfigPath))
                 {
-                    getConfig = TSConfig.Read(ConfigPath);
+                    NewConfig();
                 }
+                getConfig = TSConfig.Read(ConfigPath);
                 getConfig.Write(ConfigPath);
 
                 //reload files:
@@ -186,6 +190,43 @@ namespace TSDocs
                 Log.Error("[TSDocs] Config Exception:");
                 Log.Error(ex.ToString());
             }
+        }
+        #endregion
+
+        #region Generate New Config
+        public static void NewConfig()
+        {
+            File.WriteAllText(ConfigPath,
+            "{" + Environment.NewLine +
+            "  \"commands\": [" + Environment.NewLine +
+            "    {" + Environment.NewLine +
+            "      \"name\": \"Rules\"," + Environment.NewLine +
+            "      \"command\": \"/rules\"," + Environment.NewLine +
+            "      \"file\": \"rules.txt\"," + Environment.NewLine +
+            "      \"groups\": {" + Environment.NewLine +
+            "        \"vip\": \"vip-rules.txt\"" + Environment.NewLine +
+            "      }" + Environment.NewLine +
+            "    }," + Environment.NewLine +
+            "    {" + Environment.NewLine +
+            "      \"name\": \"Help\"," + Environment.NewLine +
+            "      \"command\": \"/help\"," + Environment.NewLine +
+            "      \"file\": \"help.txt\"," + Environment.NewLine +
+            "      \"groups\": {" + Environment.NewLine +
+            "        \"admin\": \"admin-help.txt\"," + Environment.NewLine +
+            "        \"trustedadmin\": \"tadmin-help.txt\"," + Environment.NewLine +
+            "      }" + Environment.NewLine +
+            "    }" + Environment.NewLine +
+            "  ]," + Environment.NewLine +
+            "  \"motd_enabled\": true," + Environment.NewLine +
+            "  \"motd\": {" + Environment.NewLine +
+            "    \"file\": \"motd.txt\"," + Environment.NewLine +
+            "    \"groups\": {" + Environment.NewLine +
+            "      \"guest\": \"guest-motd.txt\"," + Environment.NewLine +
+            "      \"admin\": \"admin-motd.txt\"" + Environment.NewLine +
+            "    }" + Environment.NewLine +
+            "  }," + Environment.NewLine +
+            "  \"pagination_header_format\": \"%150,255,150%%commandname - Page %current of %count | %command <page>\"" + Environment.NewLine +
+            "}");
         }
         #endregion
 
@@ -230,6 +271,15 @@ namespace TSDocs
                 foreach (var line in file)
                 {
                     string newLine = line;
+                    if (newLine.StartsWith("%command%") && newLine.EndsWith("%"))
+                    {
+                        string docmd = newLine.Split('%')[2];
+                        if (!docmd.StartsWith("/"))
+                            docmd = "/" + docmd;
+                        Commands.HandleCommand(player, docmd);
+                        continue;
+                    }
+
                     newLine = newLine.Replace("%name", player.Name);
                     newLine = newLine.Replace("%world", Main.worldName);
                     newLine = newLine.Replace("%ip", player.IP);
@@ -241,7 +291,6 @@ namespace TSDocs
                     newLine = newLine.Replace("%group", player.Group.Name);
                     newLine = newLine.Replace("%prefix", player.Group.Prefix);
                     newLine = newLine.Replace("%suffix", player.Group.Suffix);
-                    //add more here if requested!
 
                     string displayLine = newLine;
                     string colorString = "000,255,000";
@@ -281,19 +330,11 @@ namespace TSDocs
             {
                 if (text == command.command || text.StartsWith(command.command + " "))
                 {
-                    string file = command.file;
-                    foreach (var group in command.groups)
+                    if (command.file != "" && (TShock.Players[who].Group.HasPermission("tsdocs-command-*") || TShock.Players[who].Group.HasPermission("tsdocs-command-" + command.command)))
                     {
-                        if (group.Key == TShock.Players[who].Group.Name)
-                        {
-                            file = group.Value;
-                        }
-                    }
-
-                    if (file != "")
-                    {
-                        ShowFile(command, text, TShock.Players[who]);
                         e.Handled = true;
+                        Log.Info("{0} executed: {1}".SFormat(TShock.Players[who].Name, command.command));
+                        ShowFile(command, text, TShock.Players[who]);
                     }
                     break;
                 }
@@ -311,9 +352,9 @@ namespace TSDocs
                 {
                     if (group.Key == player.Group.Name)
                     {
-                        filetoshow = savepath + group.Value;
+                       filetoshow = savepath + group.Value;
                     }
-                }
+               }
 
                 Dictionary<string, Color> displayLines = new Dictionary<string, Color>();
 
@@ -321,57 +362,18 @@ namespace TSDocs
 
                 var file = File.ReadAllLines(filetoshow);
 
-                foreach (var line in file)
-                {
-                    string newLine = line;
-
-                    if (newLine.StartsWith("%command%") && newLine.EndsWith("%"))
-                    {
-                        string Lcommand = newLine.Split('%')[2];
-                        if (!Lcommand.StartsWith("/"))
-                            Lcommand = "/" + Lcommand;
-                        Commands.HandleCommand(player, Lcommand);
-                        continue;
-                    }
-
-                    newLine = newLine.Replace("%name", player.Name);
-                    newLine = newLine.Replace("%world", Main.worldName);
-                    newLine = newLine.Replace("%ip", player.IP);
-                    newLine = newLine.Replace("%timeG", Main.time.ToString());
-                    newLine = newLine.Replace("%timeR", DateTime.UtcNow.ToString());
-                    newLine = newLine.Replace("%time", DateTime.UtcNow.ToString());
-                    newLine = newLine.Replace("%online", TShock.Utils.GetPlayers());
-                    newLine = newLine.Replace("%players", TShock.Utils.GetPlayers());
-                    newLine = newLine.Replace("%group", player.Group.Name);
-                    newLine = newLine.Replace("%prefix", player.Group.Prefix);
-                    newLine = newLine.Replace("%suffix", player.Group.Suffix);
-                    //add more here if requested!
-
-                    string displayLine = newLine;
-                    string colorString = "000,255,000";
-                    try
-                    {
-                        colorString = newLine.Split('%')[1];
-                        displayLine = newLine.Remove(0, (colorString.Length + 2));
-                    }
-                    catch { }
-                    int R = 0; int G = 255; int B = 0;
-                    string[] cData = new string[3] { "000", "255", "000" };
-                    try
-                    {
-                        cData = colorString.Split(',');
-                    }
-                    catch { }
-                    int.TryParse(cData[0], out R); int.TryParse(cData[1], out G); int.TryParse(cData[2], out B);
-
-                    Color displayColour = new Color(R, G, B);
-                    displayLines.Add(displayLine, displayColour);
-                }
+                displayLines = GetMessages(file, player);
 
                 if (displayLines.Count <= 7)
                 {
                     foreach (var Pair in displayLines)
                     {
+                        if (Pair.Key.StartsWith("&CoMManD&|"))
+                        {
+                            string docmd = Pair.Key.Split('|')[1];
+                            Commands.HandleCommand(player, docmd);
+                            continue;
+                        }
                         player.SendMessage(Pair.Key, Pair.Value);
                     }
                 }
@@ -415,14 +417,94 @@ namespace TSDocs
                     var names = nameslist.ToArray();
                     var colors = colourslist.ToArray();
                     for (int i = 0; i < names.Length; i += perline)
+                    {
+                        if (names[i].StartsWith("&CoMManD&|"))
+                        {
+                            string docmd = names[i].Split('|')[1];
+                            Commands.HandleCommand(player, docmd);
+                            continue;
+                        }
                         player.SendMessage(names[i], colors[i]);
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Log.ConsoleError("Something when wrong when showing {0} a file. Check the Logs.".SFormat(player.Name));
+                Log.ConsoleError("Something when wrong when showing {0} \"{1}\". Check the Logs.".SFormat(player.Name, command.command));
                 Log.Error(ex.ToString());
             }
+        }
+        #endregion
+
+        #region Get messages from a file.
+        public static Dictionary<string, Color> GetMessages(string[] file, TSPlayer player)
+        {
+            Dictionary<string, Color> r = new Dictionary<string, Color>();
+
+            foreach (var line in file)
+            {
+                string newLine = line;
+
+                #region Check for Command / Include
+                if (newLine.StartsWith("%command%") && newLine.EndsWith("%"))
+                {
+                    string writecmd = newLine.Split('%')[2];
+                    if (!writecmd.StartsWith("/"))
+                        writecmd = "/" + writecmd;
+                    r.Add("&CoMManD&|" + writecmd, new Color(255, 255, 255));
+                    continue;
+                }
+                else if (newLine.StartsWith("%include%") && newLine.EndsWith("%"))
+                {
+                    String sfile = savepath + newLine.Split('%')[2];
+                    CheckFile(sfile);
+                    var sfiledata = File.ReadAllLines(sfile);
+                    foreach(var P in GetMessages(sfiledata, player))
+                    {
+                        r.Add(P.Key, P.Value);
+                    }
+                    continue;
+                }
+                #endregion
+
+                #region Change Variables
+                newLine = newLine.Replace("%name", player.Name);
+                newLine = newLine.Replace("%world", Main.worldName);
+                newLine = newLine.Replace("%ip", player.IP);
+                newLine = newLine.Replace("%timeG", Main.time.ToString());
+                newLine = newLine.Replace("%timeR", DateTime.UtcNow.ToString());
+                newLine = newLine.Replace("%time", DateTime.UtcNow.ToString());
+                newLine = newLine.Replace("%online", TShock.Utils.GetPlayers());
+                newLine = newLine.Replace("%players", TShock.Utils.GetPlayers());
+                newLine = newLine.Replace("%group", player.Group.Name);
+                newLine = newLine.Replace("%prefix", player.Group.Prefix);
+                newLine = newLine.Replace("%suffix", player.Group.Suffix);
+                #endregion
+
+                #region Get Colour
+                string displayLine = newLine;
+                string colorString = "000,255,000";
+                try
+                {
+                    colorString = newLine.Split('%')[1];
+                    displayLine = newLine.Remove(0, (colorString.Length + 2));
+                }
+                catch { }
+                int R = 0; int G = 255; int B = 0;
+                string[] cData = new string[3] { "000", "255", "000" };
+                try
+                {
+                    cData = colorString.Split(',');
+                }
+                catch { }
+                int.TryParse(cData[0], out R); int.TryParse(cData[1], out G); int.TryParse(cData[2], out B);
+
+                Color displayColour = new Color(R, G, B);
+                #endregion
+
+                r.Add(displayLine, displayColour);
+            }
+            return r;
         }
         #endregion
 

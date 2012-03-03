@@ -13,10 +13,9 @@
       "command": "/help",
       "file": "help.txt",
       "groups": {
-        "admin": "",
-	    "trustedadmin": "",
-		"superadmin": ""
-	  }
+        "admin": "admin-help.txt",
+        "trustedadmin": "tadmin-help.txt"
+      }
     }
   ],
   "motd_enabled": true,
