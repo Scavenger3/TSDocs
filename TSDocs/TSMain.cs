@@ -37,7 +37,7 @@ namespace TSDocs
 
         public override Version Version
         {
-            get { return new Version("1.0.2"); }
+            get { return new Version("1.0.3"); }
         }
 
         public override void Initialize()
@@ -69,7 +69,8 @@ namespace TSDocs
         #region Initialize
         public void OnInitialize()
         {
-            Commands.ChatCommands.Add(new Command("tsdocsreload", docommand, "tsdocs"));
+            Commands.ChatCommands.Add(new Command("tsdocs-reload", ReloadConf, "tsdocs"));
+            Commands.ChatCommands.Add(new Command("tsdocs-setnews", SetRules, "setnews", "snews"));
 
             savepath = Path.Combine(TShockAPI.TShock.SavePath, "TSDocs/");
 
@@ -143,7 +144,7 @@ namespace TSDocs
         #endregion
 
         #region Reload Config
-        public static void docommand(CommandArgs args)
+        public static void ReloadConf(CommandArgs args)
         {
             getConfig = new TSConfig();
             try
@@ -238,6 +239,70 @@ namespace TSDocs
             "    \"superadmin\"" + Environment.NewLine +
             "  ]" + Environment.NewLine +
             "}");
+        }
+        #endregion
+
+        #region Set rules.txt
+        public static void SetRules(CommandArgs args)
+        {
+            try
+            {
+                if (args.Parameters.Count < 2)
+                {
+                    args.Player.SendMessage("Usage: /snews <add / edit line number> <new text>", Color.IndianRed);
+                    return;
+                }
+                if (args.Parameters[0] == "add" || args.Parameters[0] == "a")
+                {
+                    var NewsFile = File.ReadAllLines(savepath + getConfig.news_file);
+                    string newLine = "";
+                    for (int i = 1; i < args.Parameters.Count; i++)
+                    {
+                        if (i == (args.Parameters.Count - 1))
+                            newLine = newLine + args.Parameters[i];
+                        else
+                            newLine = newLine + args.Parameters[i] + " ";
+                    }
+                    string[] NewNews = new string[NewsFile.Length + 1];
+                    NewNews[0] = newLine;
+                    for (int i = 1; i < NewNews.Length; i++)
+                    {
+                        NewNews[i] = NewsFile[i - 1];
+                    }
+                    File.WriteAllLines(savepath + getConfig.news_file, NewNews);
+                    args.Player.SendMessage("Sucessfuly added line to the news");
+                    return;
+                }
+                int line = 1;
+                if (!int.TryParse(args.Parameters[0], out line))
+                {
+                    args.Player.SendMessage("Error: Line number is not an integer!", Color.IndianRed);
+                    return;
+                }
+                if (line > getConfig.news_lines)
+                {
+                    args.Player.SendMessage("Error: You can only set up to line {0}.".SFormat(getConfig.news_lines), Color.IndianRed);
+                    return;
+                }
+                var nNewsFile = File.ReadAllLines(savepath + getConfig.news_file);
+                string snewLine = "";
+                for (int i = 1; i < args.Parameters.Count; i++)
+                {
+                    if (i == (args.Parameters.Count - 1))
+                        snewLine = snewLine + args.Parameters[i];
+                    else
+                        snewLine = snewLine + args.Parameters[i] + " ";
+                }
+                nNewsFile[line - 1] = snewLine;
+                File.WriteAllLines(savepath + getConfig.news_file, nNewsFile);
+                args.Player.SendMessage("Sucessfuly wrote line to the news");
+            }
+            catch (Exception ex)
+            {
+                args.Player.SendMessage("An error occoured while writing to the news file! Check the logs.", Color.IndianRed);
+                Log.Error("[TSDocs] error while writing to the news file: \n" + ex.ToString());
+            }
+
         }
         #endregion
 
