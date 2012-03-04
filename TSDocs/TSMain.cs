@@ -37,7 +37,7 @@ namespace TSDocs
 
         public override Version Version
         {
-            get { return new Version("1.0.1"); }
+            get { return new Version("1.0.2"); }
         }
 
         public override void Initialize()
@@ -97,11 +97,14 @@ namespace TSDocs
                 getConfig = TSConfig.Read(ConfigPath);
                 getConfig.Write(ConfigPath);
 
+                CheckFile(getConfig.motd.file);
                 if (!File.Exists(savepath + getConfig.motd.file))
                 {
                     File.Copy(TShock.SavePath + "/motd.txt", savepath + getConfig.motd.file);
                     File.WriteAllText(TShock.SavePath + "/motd.txt", "");
                 }
+
+                CheckFile(savepath + getConfig.news_file);
 
                 if (getConfig.motd_enabled && File.ReadAllText(TShock.SavePath + "/motd.txt") != "")
                     File.WriteAllText(TShock.SavePath + "/motd.txt", "");
@@ -153,11 +156,14 @@ namespace TSDocs
                 getConfig.Write(ConfigPath);
 
                 //reload files:
+                CheckFile(getConfig.motd.file);
                 if (!File.Exists(savepath + getConfig.motd.file))
                 {
                     File.Copy(TShock.SavePath + "/motd.txt", savepath + getConfig.motd.file);
                     File.WriteAllText(TShock.SavePath + "/motd.txt", "");
                 }
+
+                CheckFile(savepath + getConfig.news_file);
 
                 if (getConfig.motd_enabled && File.ReadAllText(TShock.SavePath + "/motd.txt") != "")
                     File.WriteAllText(TShock.SavePath + "/motd.txt", "");
@@ -225,7 +231,12 @@ namespace TSDocs
             "      \"admin\": \"admin-motd.txt\"" + Environment.NewLine +
             "    }" + Environment.NewLine +
             "  }," + Environment.NewLine +
-            "  \"pagination_header_format\": \"%150,255,150%%commandname - Page %current of %count | %command <page>\"" + Environment.NewLine +
+            "  \"pagination_header_format\": \"%150,255,150%%commandname - Page %current of %count | %command <page>\"," + Environment.NewLine +
+            "  \"news_file\": \"news.txt\"," + Environment.NewLine +
+            "  \"news_lines\": 1," + Environment.NewLine +
+            "   \"disclude_from_playerswg\": [" + Environment.NewLine +
+            "    \"superadmin\"" + Environment.NewLine +
+            "  ]" + Environment.NewLine +
             "}");
         }
         #endregion
@@ -280,36 +291,71 @@ namespace TSDocs
                         continue;
                     }
 
+                    if (newLine.Contains("%playersingroup%"))
+                    {
+                        string replace = "";
+                        string with = GetPlayersInGroup(newLine, out replace);
+
+                        newLine = newLine.Replace(replace, with);
+                    }
+
                     newLine = newLine.Replace("%name", player.Name);
                     newLine = newLine.Replace("%world", Main.worldName);
                     newLine = newLine.Replace("%ip", player.IP);
-                    newLine = newLine.Replace("%timeG", Main.time.ToString());
+                    newLine = newLine.Replace("%timeG", GetWorldTime().ToString());
                     newLine = newLine.Replace("%timeR", DateTime.UtcNow.ToString());
-                    newLine = newLine.Replace("%time", DateTime.UtcNow.ToString());
-                    newLine = newLine.Replace("%online", TShock.Utils.GetPlayers());
+                    newLine = newLine.Replace("%time", GetWorldTime().ToString());
+                    newLine = newLine.Replace("%playercount", GetPlayerCount().ToString());
+                    newLine = newLine.Replace("%playerswg", GetPlayersWithGroups());
                     newLine = newLine.Replace("%players", TShock.Utils.GetPlayers());
                     newLine = newLine.Replace("%group", player.Group.Name);
                     newLine = newLine.Replace("%prefix", player.Group.Prefix);
                     newLine = newLine.Replace("%suffix", player.Group.Suffix);
-
+                    
                     string displayLine = newLine;
-                    string colorString = "000,255,000";
-                    try
+                    Color displayColour = new Color(0, 255, 0);
+                    if (newLine.StartsWith("%"))
                     {
-                        colorString = newLine.Split('%')[1];
-                        displayLine = newLine.Remove(0, (colorString.Length + 2));
-                    }
-                    catch { }
-                    int R = 0; int G = 255; int B = 0;
-                    string[] cData = new string[3] { "000", "255", "000" };
-                    try
-                    {
-                        cData = colorString.Split(',');
-                    }
-                    catch { }
-                    int.TryParse(cData[0], out R); int.TryParse(cData[1], out G); int.TryParse(cData[2], out B);
+                        string colorString = "000,255,000";
+                        try
+                        {
+                            colorString = newLine.Split('%')[1];
+                            displayLine = newLine.Remove(0, (colorString.Length + 2));
+                        }
+                        catch { }
+                        int R = 0; int G = 255; int B = 0;
+                        string[] cData = new string[3] { "000", "255", "000" };
+                        try
+                        {
+                            cData = colorString.Split(',');
+                            R = Convert.ToInt32(cData[0]);
+                            G = Convert.ToInt32(cData[1]);
+                            B = Convert.ToInt32(cData[2]);
+                        }
+                        catch { displayLine = newLine; R = 0; G = 255; B = 0; }
 
-                    player.SendMessage(displayLine, (byte)R, (byte)G, (byte)B);
+                        displayColour = new Color(R, G, B);
+                    }
+
+                    #region Replace the news
+                    if (displayLine.Contains("%news"))
+                    {
+                        bool firstline = true;
+                        foreach (var lne in GetLatestNews())
+                        {
+                            if (firstline)
+                            {
+                                firstline = false;
+                                player.SendMessage(displayLine.Replace("%news", lne), displayColour);
+                            }
+                            else
+                                player.SendMessage(lne, displayColour);
+                        }
+                        continue;
+                    }
+                    #endregion
+
+                    player.SendMessage(displayLine, displayColour);
                 }
             }
             catch (Exception ex)
@@ -436,7 +482,7 @@ namespace TSDocs
         }
         #endregion
 
-        #region Get messages from a file.
+        #region Get messages from a file
         public static Dictionary<string, Color> GetMessages(string[] file, TSPlayer player)
         {
             Dictionary<string, Color> r = new Dictionary<string, Color>();
@@ -468,13 +514,21 @@ namespace TSDocs
                 #endregion
 
                 #region Change Variables
+                if (newLine.Contains("%playersingroup%"))
+                {
+                    string replace = "";
+                    string with = GetPlayersInGroup(newLine, out replace);
+
+                    newLine = newLine.Replace(replace, with);
+                }
                 newLine = newLine.Replace("%name", player.Name);
                 newLine = newLine.Replace("%world", Main.worldName);
                 newLine = newLine.Replace("%ip", player.IP);
-                newLine = newLine.Replace("%timeG", Main.time.ToString());
+                newLine = newLine.Replace("%timeG", GetWorldTime().ToString());
                 newLine = newLine.Replace("%timeR", DateTime.UtcNow.ToString());
-                newLine = newLine.Replace("%time", DateTime.UtcNow.ToString());
-                newLine = newLine.Replace("%online", TShock.Utils.GetPlayers());
+                newLine = newLine.Replace("%time", GetWorldTime().ToString());
+                newLine = newLine.Replace("%playercount", GetPlayerCount().ToString());
+                newLine = newLine.Replace("%playerswg", GetPlayersWithGroups());
                 newLine = newLine.Replace("%players", TShock.Utils.GetPlayers());
                 newLine = newLine.Replace("%group", player.Group.Name);
                 newLine = newLine.Replace("%prefix", player.Group.Prefix);
@@ -483,29 +537,201 @@ namespace TSDocs
 
                 #region Get Colour
                 string displayLine = newLine;
-                string colorString = "000,255,000";
-                try
+                Color displayColour = new Color(0, 255, 0);
+                if (newLine.StartsWith("%"))
                 {
-                    colorString = newLine.Split('%')[1];
-                    displayLine = newLine.Remove(0, (colorString.Length + 2));
-                }
-                catch { }
-                int R = 0; int G = 255; int B = 0;
-                string[] cData = new string[3] { "000", "255", "000" };
-                try
-                {
-                    cData = colorString.Split(',');
-                }
-                catch { }
-                int.TryParse(cData[0], out R); int.TryParse(cData[1], out G); int.TryParse(cData[2], out B);
+                    string colorString = "000,255,000";
+                    try
+                    {
+                        colorString = newLine.Split('%')[1];
+                        displayLine = newLine.Remove(0, (colorString.Length + 2));
+                    }
+                    catch { }
+                    int R = 0; int G = 255; int B = 0;
+                    string[] cData = new string[3] { "000", "255", "000" };
+                    try
+                    {
+                        cData = colorString.Split(',');
+                        R = Convert.ToInt32(cData[0]);
+                        G = Convert.ToInt32(cData[1]);
+                        B = Convert.ToInt32(cData[2]);
+                    }
+                    catch { displayLine = newLine; R = 0; G = 255; B = 0; }
 
-                Color displayColour = new Color(R, G, B);
+                    displayColour = new Color(R, G, B);
+                }
+                #endregion
+
+                #region Replace the news
+                if (displayLine.Contains("%news"))
+                {
+                    bool firstline = true;
+                    foreach (var lne in GetLatestNews())
+                    {
+                        if (firstline)
+                        {
+                            firstline = false;
+                            r.Add(displayLine.Replace("%news", lne), displayColour);
+                        }
+                        else
+                            r.Add(lne, displayColour);
+                    }
+                    continue;
+                }
                 #endregion
 
                 r.Add(displayLine, displayColour);
             }
             return r;
         }
+        #endregion
+
+        #region Get Stuff for Variables
+        #region Get Latest News
+        public static List<string> GetLatestNews()
+        {
+            CheckFile(savepath + getConfig.news_file);
+            List<string> r = new List<string>();
+            var file = File.ReadAllLines(savepath + getConfig.news_file);
+            if (file.Length < 1)
+                return new List<string> { " " };
+            for (int i = 1; i <= Math.Min(getConfig.news_lines, file.Length); i++)
+            {
+                int line = i - 1;
+                r.Add(file[line]);
+            }
+            return r;
+        }
+        #endregion
+
+        #region Get World Time
+        public static string GetWorldTime()
+        {
+            string text25 = "AM";
+            double num212 = Main.time;
+            if (!Main.dayTime)
+            {
+                num212 += 54000.0;
+            }
+            num212 = num212 / 86400.0 * 24.0;
+            double num213 = 7.5;
+            num212 = num212 - num213 - 12.0;
+            if (num212 < 0.0)
+            {
+                num212 += 24.0;
+            }
+            if (num212 >= 12.0)
+            {
+                text25 = "PM";
+            }
+            int num214 = (int)num212;
+            double num215 = num212 - (double)num214;
+            num215 = (double)((int)(num215 * 60.0));
+            string text26 = string.Concat(num215);
+            if (num215 < 10.0)
+            {
+                text26 = "0" + text26;
+            }
+            if (num214 > 12)
+            {
+                num214 -= 12;
+            }
+            if (num214 == 0)
+            {
+                num214 = 12;
+            }
+            if (Main.player[Main.myPlayer].accWatch == 1)
+            {
+                text26 = "00";
+            }
+            else
+            {
+                if (Main.player[Main.myPlayer].accWatch == 2)
+                {
+                    if (num215 < 30.0)
+                    {
+                        text26 = "00";
+                    }
+                    else
+                    {
+                        text26 = "30";
+                    }
+                }
+            }
+            string text24 = string.Concat(new object[]
+			{
+			    num214,
+			    ":",
+			    text26,
+			    " ",
+			    text25
+			});
+            return text24;
+        }
+        #endregion
+
+        #region Get Player Lists
+        public static string GetPlayersInGroup(string newLine, out string replace)
+        {
+            
+            string group = "";
+            var data = newLine.Split('%');
+            for (int i = 0; i < data.Length; i++)
+            {
+                if (data[i] == "playersingroup")
+                {
+                    group = data[i + 1];
+                    break;
+                }
+            }
+
+            var sb = new StringBuilder();
+            foreach (TSPlayer splayer in TShock.Players)
+            {
+                if (splayer != null && splayer.Active && splayer.Group.Name == group)
+                {
+                    if (sb.Length != 0)
+                    {
+                        sb.Append(", ");
+                    }
+                    sb.Append(splayer.Name);
+                }
+            }
+
+            replace = "%playersingroup%" + group + "%";
+            return sb.ToString();
+        }
+
+        public static string GetPlayersWithGroups()
+        {
+            var sb2 = new StringBuilder();
+            foreach (TSPlayer splayer in TShock.Players)
+            {
+                if (splayer != null && splayer.Active && !getConfig.disclude_from_playerswg.Contains(splayer.Group.Name))
+                {
+                    if (sb2.Length != 0)
+                    {
+                        sb2.Append(", ");
+                    }
+                    sb2.Append(splayer.Name + " (" + splayer.Group.Name + ")");
+                }
+            }
+            return sb2.ToString();
+        }
+
+        public static int GetPlayerCount()
+        {
+            int count = 0;
+            foreach (TSPlayer splayer in TShock.Players)
+            {
+                if (splayer != null && splayer.Active)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+        #endregion
         #endregion
 
         #region Get Pagination Header

@@ -11,6 +11,9 @@ namespace TSDocs
         public bool motd_enabled = true;
         public TSMotds motd;// = new CMotd("motd.txt", "guest", "guest-motd.txt");
         public string pagination_header_format = "%150,255,150%%commandname - Page %current of %count | %command <page>";
+        public string news_file = "news.txt";
+        public int news_lines = 1;
+        public string[] disclude_from_playerswg = { "superadmin" };
 
 
         public static TSConfig Read(string path)
