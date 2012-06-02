@@ -12,7 +12,7 @@ using System.Net;
 
 namespace TSDocs
 {
-    [APIVersion(1, 11)]
+    [APIVersion(1, 12)]
     public class TSDocs : TerrariaPlugin
     {
         Dictionary<string, string[]> CachedFiles = new Dictionary<string, string[]>();
@@ -30,7 +30,7 @@ namespace TSDocs
             get { return "by Scavenger"; }
         }
 
-        public override string Description //online files coming soon, I Hope ;D
+        public override string Description /* online files coming soon, I Hope ;D */
         {
             get { return "Powerful Documentation and MOTD Plugin. Show information from a file or online using a command that you define."; }
         }
@@ -79,9 +79,9 @@ namespace TSDocs
 
             if (SetupConfig())
             {
-                //Console.ForegroundColor = ConsoleColor.DarkGreen;
-                //Console.WriteLine("[TSDocs] TSDocs sucessfuly loaded!");
-                //Console.ForegroundColor = ConsoleColor.Gray;
+                /*Console.ForegroundColor = ConsoleColor.DarkGreen;
+                Console.WriteLine("[TSDocs] TSDocs sucessfuly loaded!");
+                Console.ForegroundColor = ConsoleColor.Gray;*/
             }
         }
         #endregion
