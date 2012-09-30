@@ -7,10 +7,10 @@ namespace TSDocs
 {
     public class TSCommand
     {
-        public string name = "";
-        public string command = "";
-        public string file = "";
-        public Dictionary<string, string> groups = new Dictionary<string, string>();
+		public string name { get; set; }
+		public string command { get; set; }
+		public string file { get; set; }
+		public Dictionary<string, string> groups { get; set; }
 
         public TSCommand(string name, string command, string file, Dictionary<string, string> groups)
         {
@@ -23,8 +23,8 @@ namespace TSDocs
 
     public class TSMotds
     {
-        public string file = "";
-        public Dictionary<string, string> groups = new Dictionary<string, string>();
+		public string file { get; set; }
+		public Dictionary<string, string> groups { get; set; }
 
         public TSMotds(string file, Dictionary<string, string> groups)
         {

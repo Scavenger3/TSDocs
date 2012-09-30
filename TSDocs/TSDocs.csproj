@@ -30,6 +30,7 @@
     <Compile Include="TSConfig.cs" />
     <Compile Include="TSMain.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TSUtils.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Community.CsharpSqlite">
